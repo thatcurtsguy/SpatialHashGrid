@@ -55,6 +55,9 @@ class SpatialHashGrid
 	sf::Rect<float> m_border{};
 	std::vector<std::vector<Cell<T>>> m_cellsArray{};
 	std::vector<T> m_points{};
+	sf::VertexArray m_renderGrid{};
+
+
 
 	template <typename T2>
 	static std::string concatenate(const T2& t)
@@ -87,11 +90,11 @@ class SpatialHashGrid
 		{
 			std::vector<Cell<T>> cellsRow;
 			cellsRow.reserve(m_gridsY);
+
 			for (size_t j = 0; j < m_gridsY; j++)
 			{
-				const sf::Rect rect{ i * m_cellWidth, j * m_cellHeight, m_cellWidth, m_cellHeight };
-				Cell<T> cell(rect);
-				cell.reserve(m_vertexReserve);
+				const sf::Rect rect( i * m_cellWidth, j * m_cellHeight, m_cellWidth, m_cellHeight );
+				Cell<T> cell(rect, m_vertexReserve);
 
 				cellsRow.emplace_back(cell);
 			}
@@ -109,6 +112,30 @@ class SpatialHashGrid
 
 		// initilising the grid
 		initGrid();
+		initDrawGrid();
+	}
+
+
+	void initDrawGrid()
+	{
+		sf::VertexArray grid(sf::Lines, m_gridsX * m_gridsY);
+
+		size_t counter = 0;
+		for (size_t i = 0; i < m_gridsX; i++)
+		{
+			grid[counter+0].position = { i * m_cellWidth, 0 };
+			grid[counter+1].position = { i * m_cellWidth, m_border.top + m_border.height };
+			counter += 2;
+		}
+
+		for (size_t i = 0; i < m_gridsX; i++)
+		{
+			grid[counter + 0].position = { 0, i * m_cellWidth };
+			grid[counter + 1].position = { m_border.left + m_border.width, i * m_cellWidth };
+			counter += 2;
+		}
+
+		m_renderGrid = grid;
 	}
 
 
@@ -144,19 +171,7 @@ public:
 
 	void drawGrid(sf::RenderWindow& window)
 	{
-		for (std::vector<Cell<T>>& column : m_cellsArray)
-		{
-			for (const Cell<T>& cell : column) {
-				sf::RectangleShape drawRect;
-				drawRect.setOutlineThickness(1);
-				drawRect.setOutlineColor(sf::Color::White);
-				drawRect.setFillColor(sf::Color(0, 0, 0, 0));
-
-				drawRect.setPosition(sf::Vector2f(cell.rect.left, cell.rect.top));
-				drawRect.setSize(sf::Vector2f(cell.rect.width, cell.rect.height));
-				window.draw(drawRect);
-			}
-		}
+		window.draw(m_renderGrid);
 	}
 
 
@@ -234,5 +249,6 @@ public:
 		m_gridsY = gridsY;
 
 		init();
+		initDrawGrid();
 	}
 };
