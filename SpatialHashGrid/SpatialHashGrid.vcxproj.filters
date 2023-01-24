@@ -18,12 +18,21 @@
     <ClCompile Include="src\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\circles\circles.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\SpatialHashGrid\utilities.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\SpatialHashGrid\spatialHashGrid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\entity.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\circles\circles.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
