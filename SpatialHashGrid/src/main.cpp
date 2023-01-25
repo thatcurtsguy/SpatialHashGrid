@@ -20,6 +20,53 @@
 #include "entity.hpp"
 
 
+struct ZoomableVertexArray {
+    sf::VertexArray m_vertexArray{};
+    sf::Transform m_transform{};
+    float m_zoomStrength{};
+
+    const float m_screenWidth{};
+    const float m_screenHeight{};
+
+    ZoomableVertexArray(const sf::VertexArray* vertexArray, const float zoomStrength, const float screenWidth, const float screenHeight)
+        : m_vertexArray(*vertexArray), m_zoomStrength(zoomStrength), m_screenWidth(screenWidth), m_screenHeight(screenHeight) {}
+
+
+    void update(const float mouseWheelScroll_delta, const sf::Vector2f& offset)
+    {
+        // apply the translation offset
+        m_transform.translate(offset);
+
+        // update the transform
+        if (mouseWheelScroll_delta > 0)
+        {
+            // mouse wheel scrolled up, zoom in
+            m_transform.scale(1.0f + m_zoomStrength, 1.0f + m_zoomStrength);
+        }
+        else
+        {
+            // mouse wheel scrolled down, zoom out
+            m_transform.scale(1.0f - m_zoomStrength, 1.0f - m_zoomStrength);
+        }
+
+        // apply the opposite of the translation offset
+        m_transform.translate(-offset);
+    }
+
+    void updateMousePosition(const sf::Vector2f& mousePos, const float mouseWheelScroll_delta) {
+        auto offset = m_transform.getInverse().transformPoint(mousePos);
+        //offset += sf::Vector2f(m_screenWidth / 2, m_screenHeight / 2);
+        update(mouseWheelScroll_delta, offset);
+    }
+
+    void drawVertexArray(sf::RenderWindow& window, const sf::VertexArray& vArray) const
+    {
+        window.draw(vArray, m_transform);
+    }
+
+};
+
+
 unsigned int calcCellsXY(const unsigned int pointsPerCell, const unsigned int points)
 {
     return static_cast<unsigned int>(std::sqrt(points / pointsPerCell));
@@ -79,11 +126,13 @@ std::vector<Entity> generateEntities(const float screenWidth, const float screen
 
 int main()
 {
-    constexpr unsigned int particles = 50'000;
-    constexpr float radius = 3;
+    constexpr unsigned int particles = 100'000;
+    constexpr float radius = 1;
     constexpr unsigned int vertexReserve = 10;
-    constexpr unsigned int circleSides = 4;
-    constexpr float maxSpeed = 1;
+    constexpr unsigned int circleSides = 6;
+    constexpr float maxSpeed = 0.04f;
+
+    constexpr unsigned int deltaGridRate = 10;
 
     // initilising random
     std::srand(static_cast<unsigned>(time(nullptr)));
@@ -104,12 +153,17 @@ int main()
     sf::Color colorActive = { 255, 0, 0 };
     sf::Color colorInctive = { 255, 255, 255 };
 
-    std::unique_ptr<sf::RenderWindow> window = generateWindow(screenWidth, screenHeight, "Collision Detection!");
+    std::unique_ptr<sf::RenderWindow> window = generateWindow(screenWidth, screenHeight, "Spatial Hash Grid");
 
     std::vector<Entity> entities = generateEntities(screenWidth, screenHeight, particles, radius, maxSpeed, colorActive, colorInctive, border);
 
     bool paused = false;
-    bool draw_grid = true;
+    bool draw_grid = false;
+
+    // Zooming
+    constexpr float zoomStrength = 0.25f;
+    ZoomableVertexArray zoomedCircles(&circles.m_circleArray, zoomStrength, screenWidth, screenHeight);
+    ZoomableVertexArray zoomedGrid(&grid.m_renderGrid, zoomStrength, screenWidth, screenHeight);
 
 
     // main game loop
@@ -117,7 +171,8 @@ int main()
     {
         // event handeler
         sf::Event event{};
-        while (window->pollEvent(event)) 
+
+    	while (window->pollEvent(event)) 
         {
             if (event.type == sf::Event::Closed)
                 window->close();
@@ -138,17 +193,24 @@ int main()
                         break;
 
                     case sf::Keyboard::Num1:
-                        CellsX++;
-                        CellsY++;
+                        CellsX+= deltaGridRate;
+                        CellsY+= deltaGridRate;
                         grid.reSize(CellsX, CellsY);
                         break;
 
                     case sf::Keyboard::Num2:
-                        CellsX--;
-                        CellsY--;
+                        CellsX-= deltaGridRate;
+                        CellsY-= deltaGridRate;
                         grid.reSize(CellsX, CellsY);
                         break;
                 }
+            }
+
+            else if (event.type == sf::Event::MouseWheelScrolled)
+            {
+                auto mousePos = sf::Vector2f(sf::Mouse::getPosition(*window));
+                zoomedCircles.updateMousePosition(mousePos, event.mouseWheelScroll.delta);
+                zoomedGrid.updateMousePosition(mousePos, event.mouseWheelScroll.delta);
             }
         }
 
@@ -164,11 +226,11 @@ int main()
 	        }
         }
 
-        if (draw_grid)
-        	grid.drawGrid(*window);
 
         setCaption(*window, clock);
-        window->draw(circles.m_circleArray, sf::BlendAdd);
+        zoomedCircles.drawVertexArray(*window, circles.m_circleArray);
+        if (draw_grid)
+			zoomedGrid.drawVertexArray(*window, grid.m_renderGrid);
         window->display();
     }
 }

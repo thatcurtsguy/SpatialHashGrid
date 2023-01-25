@@ -84,7 +84,7 @@ private:
 			const float dx = entity.p_position.x - p_position.x;
 			const float dy = entity.p_position.y - p_position.y;
 
-			if (const float dSquared = dx * dx + dy * dy; dSquared < (m_radiusSquared*2) and (entity.id != id))
+			if (const float dSquared = dx * dx + dy * dy; dSquared <= (m_radiusSquared*3) and (entity.id != id))
 				return true;
 		}
 		return false;

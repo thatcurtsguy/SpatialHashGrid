@@ -19,16 +19,13 @@
 	}
 
 	Improvements:
-	- replace screen size settings with a rect object
 	- make a check visual range function
 	- make a way to check nearby gridcells
 	- make a way to return the cells within visual range
 	- make the grid a 2d array so we can make more optimised searching by matching the x then y coord instead of checking through all
 	- automatic resolution resizer
 	- option for resolution resizer
-	- ability to pass in any class type to be stored
 	- better cell finding alg
-	- efficient grid drawing with vertex list
 
 	Notes:
 	FINAL GOAL: 50k particles at 144fps
@@ -55,10 +52,12 @@ class SpatialHashGrid
 	sf::Rect<float> m_border{};
 	std::vector<std::vector<Cell<T>>> m_cellsArray{};
 	std::vector<T> m_points{};
+
+public:
 	sf::VertexArray m_renderGrid{};
 
 
-
+private:
 	template <typename T2>
 	static std::string concatenate(const T2& t)
 	{
@@ -128,10 +127,10 @@ class SpatialHashGrid
 			counter += 2;
 		}
 
-		for (size_t i = 0; i < m_gridsX; i++)
+		for (size_t i = 0; i < m_gridsY; i++)
 		{
-			grid[counter + 0].position = { 0, i * m_cellWidth };
-			grid[counter + 1].position = { m_border.left + m_border.width, i * m_cellWidth };
+			grid[counter + 0].position = { 0, i * m_cellHeight };
+			grid[counter + 1].position = { m_border.left + m_border.width, i * m_cellHeight };
 			counter += 2;
 		}
 
