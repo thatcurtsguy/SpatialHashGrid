@@ -21,7 +21,32 @@ public:
 	sf::Vector2f p_position{};
 
 	const unsigned int id{};
-	sf::Vector2i gridIndex{ -1, -1 };
+
+
+	// constructor and destructor
+	explicit Entity(const sf::Vector2f position = {0, 0}, const sf::Vector2f velocity = { 0, 0 }, const sf::Color colorActive = { 0, 0, 0 }, 
+	                const sf::Color colorInactive = { 0, 0, 0 }, const float interactionRadius=1, const unsigned int _id=1, 
+	                const float maxSpeed = 1, const sf::Rect<float>& border = { 0, 0, 0, 0 })
+		: m_velocity(velocity), m_colorActive(colorActive), m_colorInactive(colorInactive), m_radius(interactionRadius),
+		m_radiusSquared(m_radius* m_radius), m_maxSpeed(maxSpeed), m_border(border), p_position(position), id(_id) {}
+
+	~Entity() = default;
+
+
+	void update(ArrayOfCircles& allCircles, const std::vector<Entity*>& nearbyEntities)
+	{
+		const Circle& renderCircle = allCircles.m_circles[id];
+
+		interactWithNearby(renderCircle, allCircles, nearbyEntities);
+		speed_limit();
+		updatePosition(allCircles, renderCircle);
+		borderCollision();
+	}
+
+	sf::Vector2f getPosition() const
+	{
+		return p_position;
+	}
 
 
 private:
@@ -76,22 +101,22 @@ private:
 	}
 
 
-	bool checkNearbyCollision(const std::vector<Entity>& nearbyEntities) const
+	bool checkNearbyCollision(const std::vector<Entity*>& nearbyEntities) const
 	{
-		for (const Entity& entity : nearbyEntities)
+		for (const Entity* entity : nearbyEntities)
 		{
 			// dist = sqrt(dx**2 + dy**2)
-			const float dx = entity.p_position.x - p_position.x;
-			const float dy = entity.p_position.y - p_position.y;
+			const float dx = entity->p_position.x - p_position.x;
+			const float dy = entity->p_position.y - p_position.y;
 
-			if (const float dSquared = dx * dx + dy * dy; dSquared <= (m_radiusSquared*3) and (entity.id != id))
+			if (const float dSquared = dx * dx + dy * dy; dSquared <= (m_radiusSquared*3) and (entity->id != id))
 				return true;
 		}
 		return false;
 	}
 
 
-	void interactWithNearby(const Circle& renderCircle, ArrayOfCircles& allCircles, const std::vector<Entity>& nearbyEntities) const
+	void interactWithNearby(const Circle& renderCircle, ArrayOfCircles& allCircles, const std::vector<Entity*>& nearbyEntities) const
 	{
 		const bool collision = checkNearbyCollision(nearbyEntities);
 		const sf::Color currentColor = renderCircle.getColor(allCircles.m_circleArray);
@@ -110,32 +135,5 @@ private:
 				renderCircle.setColor(allCircles.m_circleArray, m_colorInactive);
 			}
 		}
-	}
-
-
-public:
-	// constructor and destructor
-	Entity(const sf::Vector2f position, const sf::Vector2f velocity, const sf::Color colorActive, const sf::Color colorInactive,
-	       const float interactionRadius, const unsigned int _id, const float maxSpeed, const sf::Rect<float>& border)
-
-	: m_velocity(velocity), m_colorActive(colorActive), m_colorInactive(colorInactive), m_radius(interactionRadius),
-	  m_radiusSquared(m_radius * m_radius), m_maxSpeed(maxSpeed), m_border(border), p_position(position), id(_id) {}
-
-	~Entity() = default;
-
-
-	void update(ArrayOfCircles& allCircles, const std::vector<Entity>& nearbyEntities)
-	{
-		const Circle& renderCircle = allCircles.m_circles[id];
-
-		interactWithNearby(renderCircle, allCircles, nearbyEntities);
-		speed_limit();
-		updatePosition(allCircles, renderCircle);
-		borderCollision();
-	}
-
-	sf::Vector2f getPosition() const
-	{
-		return p_position;
 	}
 };

@@ -2,6 +2,7 @@
 
 #include <SFML/Graphics.hpp>
 #include <vector>
+#include <algorithm>
 
 #include "utilities.h"
 
@@ -11,7 +12,6 @@
 	PLEASE NOTE:
 	> for any entity class you plan to add to this spatial hash grid, please add the following varaibles to it:
 	const unsigned int id{};
-	sf::Vector2i gridIndex{ -1, -1 };
 
 	sf::Vector2f getPosition() const
 	{
@@ -53,28 +53,12 @@ class SpatialHashGrid
 	std::vector<std::vector<Cell<T>>> m_cellsArray{};
 	std::vector<T> m_points{};
 
+
 public:
 	sf::VertexArray m_renderGrid{};
 
 
 private:
-	template <typename T2>
-	static std::string concatenate(const T2& t)
-	{
-		std::stringstream ss;
-		ss << t;
-		return ss.str();
-	}
-
-	template <typename T2, typename... Args>
-	static std::string concatenate(const T2& t, const Args&... args)
-	{
-		std::stringstream ss;
-		ss << t << concatenate(args...);
-		return ss.str();
-	}
-
-
 
 	void initGrid()
 	{
@@ -158,6 +142,48 @@ private:
 	}
 
 
+	void resetGrid()
+	{
+		for (std::vector<Cell<T>>& column : m_cellsArray)
+		{
+			for (Cell<T>& cell : column)
+				cell.clear();
+		}
+	}
+
+	sf::Vector2i positionToIndex(const sf::Vector2f position, const bool preventOutOfRange = false, const bool wrap = true) const
+	{
+		/* findCell function finds the cell which contains the position parameter, it iterates through
+		   cellsArray which is a 2D std::vector. once found it returns a std::tuple for the indexes to find said cell
+		   if no cell was found it returns -1, -1 for both indexes
+		*/
+		sf::Vector2i index(position.x / m_cellWidth, position.y / m_cellHeight);
+
+		// validation
+		if (checkValidIndex(index))
+		{
+			return index;
+		}
+
+		if (preventOutOfRange)
+		{
+			index.x = (index.x < 0) ? 0 : (index.x >= m_gridsX) ? m_gridsX - 1 : index.x;
+			index.y = (index.y < 0) ? 0 : (index.y >= m_gridsY) ? m_gridsY - 1 : index.y;
+			return index;
+
+		}
+
+		if (wrap)
+		{
+
+		}
+
+		const std::string result = concatenate("position: { ", position.x, " , ", position.y, " } ", " index: { ", index.x, ",", index.y, " }");
+		RaiseOutOfBoundsError(result);
+		return { -1, -1 };
+	}
+
+
 public:
 	// constructor
 	SpatialHashGrid(const sf::Rect<float> border, const unsigned int gridsX, const unsigned int gridsY, const unsigned int vertexReserve = 8)
@@ -168,62 +194,37 @@ public:
 	~SpatialHashGrid() = default;
 
 
-	void drawGrid(sf::RenderWindow& window)
+	void drawGrid(sf::RenderWindow& window) const
 	{
 		window.draw(m_renderGrid);
 	}
 
 
-	sf::Vector2i findCellIndex(const sf::Vector2f position) const
-	{
-		/* findCell function finds the cell which contains the position parameter, it iterates through
-		   cellsArray which is a 2D std::vector. once found it returns a std::tuple for the indexes to find said cell
-		   if no cell was found it returns -1, -1 for both indexes
-		*/
-		const sf::Vector2i index(static_cast<int>(position.x / m_cellWidth), static_cast<int>(position.y / m_cellHeight));
 
-		// validation
-		if (checkValidIndex(index))
-		{
-			return index;
-		}
-		
-		std::string result = concatenate("position: { ", position.x, " , ", position.y, " } ", " index: { ", index.x, ",", index.y, " }");
-		RaiseOutOfBoundsError(result);
-		return { -1, -1 };
-	}
-
-
-	std::vector<T> findNear(T& point)
+	std::vector<T*>& findNear(T& point, const float visualRange)
 	{
 		// now we need to find which cell contains the point
-		const sf::Vector2i cell = findCellIndex(point.getPosition());
+		//return getCellsAroundRange(point.getPosition(), visualRange);
+		const sf::Vector2i cell = positionToIndex(point.getPosition());
 		return cellAtIndex(cell).container;
 	}
 
 
-	void addPoint(T& point)
+	void addPoint(T* point)
 	{
-		const sf::Vector2i cellIndex = findCellIndex(point.getPosition());
-
-		point.gridIndex = cellIndex;
-		cellAtIndex(cellIndex).add(point);
+		const sf::Vector2i index = positionToIndex(point->getPosition());
+		cellAtIndex(index).add(point);
 	}
 
 
 	void addPoints(std::vector<T>& points)
 	{
-		// reseting cells by clearing all of their items
-		for (std::vector<Cell<T>>& column : m_cellsArray)
-		{
-			for (Cell<T>& cell : column)
-				cell.clear();
-		}
+		resetGrid();
 
 		// we then can add all the Particles one by one
 		for (T& point : points)
 		{
-			addPoint(point);
+			addPoint(&point);
 		}
 	}
 
@@ -231,16 +232,7 @@ public:
 	void reSize(const unsigned int gridsX, const unsigned int gridsY)
 	{
 		// we need to clear all the cells' points indexes
-		for (std::vector<Cell<T>>& column : m_cellsArray)
-		{
-			for (Cell<T>& cell : column)
-			{
-				cell.container.clear();
-			}
-		}
-
-		for (T& point : m_points)
-			point.gridIndex = { -1, -1 };
+		resetGrid();
 
 		m_cellsArray.clear();
 

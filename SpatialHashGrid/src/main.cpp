@@ -18,70 +18,9 @@
 #include "SpatialHashGrid/spatialHashGrid.h"
 #include "circles/circles.hpp"
 #include "entity.hpp"
+#include "utilities/zoomableVertexArray.hpp"
+#include "utilities/generalFunctions.hpp"
 
-
-struct ZoomableVertexArray {
-    sf::VertexArray m_vertexArray{};
-    sf::Transform m_transform{};
-    float m_zoomStrength{};
-
-    const float m_screenWidth{};
-    const float m_screenHeight{};
-
-    ZoomableVertexArray(const sf::VertexArray* vertexArray, const float zoomStrength, const float screenWidth, const float screenHeight)
-        : m_vertexArray(*vertexArray), m_zoomStrength(zoomStrength), m_screenWidth(screenWidth), m_screenHeight(screenHeight) {}
-
-
-    void update(const float mouseWheelScroll_delta, const sf::Vector2f& offset)
-    {
-        // apply the translation offset
-        m_transform.translate(offset);
-
-        // update the transform
-        if (mouseWheelScroll_delta > 0)
-        {
-            // mouse wheel scrolled up, zoom in
-            m_transform.scale(1.0f + m_zoomStrength, 1.0f + m_zoomStrength);
-        }
-        else
-        {
-            // mouse wheel scrolled down, zoom out
-            m_transform.scale(1.0f - m_zoomStrength, 1.0f - m_zoomStrength);
-        }
-
-        // apply the opposite of the translation offset
-        m_transform.translate(-offset);
-    }
-
-    void updateMousePosition(const sf::Vector2f& mousePos, const float mouseWheelScroll_delta) {
-        auto offset = m_transform.getInverse().transformPoint(mousePos);
-        //offset += sf::Vector2f(m_screenWidth / 2, m_screenHeight / 2);
-        update(mouseWheelScroll_delta, offset);
-    }
-
-    void drawVertexArray(sf::RenderWindow& window, const sf::VertexArray& vArray) const
-    {
-        window.draw(vArray, m_transform);
-    }
-
-};
-
-
-unsigned int calcCellsXY(const unsigned int pointsPerCell, const unsigned int points)
-{
-    return static_cast<unsigned int>(std::sqrt(points / pointsPerCell));
-}
-
-
-int randint(const unsigned int start, const unsigned int end)
-{
-    return rand() % (end - start) + start;
-}
-
-float randfloat(const float start, const float end)
-{
-    return (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * (end - start)) + start;
-}
 
 
 void setCaption(sf::RenderWindow& window, sf::Clock& clock)
@@ -124,44 +63,48 @@ std::vector<Entity> generateEntities(const float screenWidth, const float screen
     return entities;
 }
 
+
 int main()
 {
-    constexpr unsigned int particles = 100'000;
-    constexpr float radius = 1;
+    constexpr unsigned int particles = 50'000;
     constexpr unsigned int vertexReserve = 10;
-    constexpr unsigned int circleSides = 6;
-    constexpr float maxSpeed = 0.04f;
-
+    constexpr unsigned int circleSides = 10;
     constexpr unsigned int deltaGridRate = 10;
 
-    // initilising random
-    std::srand(static_cast<unsigned>(time(nullptr)));
+    constexpr float maxSpeed     = 0.04f;
+    constexpr float entityRadius = 1.7f;
+    constexpr float zoomStrength = 0.25f;
+
+    constexpr float screenWidth  = 1920.0f;
+    constexpr float screenHeight = 1080.0f;
 
     unsigned int CellsX = calcCellsXY(vertexReserve, particles);
     unsigned int CellsY = calcCellsXY(vertexReserve, particles);
 
-    // setting up the screen
-    constexpr float screenWidth = 1920.0f;
-    constexpr float screenHeight = 1080.0f;
+    // initilising random
+    std::srand(static_cast<unsigned>(time(nullptr)));
 
+    // setting up the screen
+    std::unique_ptr<sf::RenderWindow> window = generateWindow(screenWidth, screenHeight, "Spatial Hash Grid");
     auto clock = sf::Clock::Clock();
 
-    ArrayOfCircles circles(particles, radius, circleSides);
-    sf::Rect<float> border{ 0.0f, 0.0f, screenWidth, screenHeight };
+    ArrayOfCircles circles(particles, entityRadius, circleSides);
+    sf::Rect border{ 0.0f, 0.0f, screenWidth, screenHeight };
     SpatialHashGrid<Entity> grid(border, CellsX, CellsY, vertexReserve);
 
-    sf::Color colorActive = { 255, 0, 0 };
-    sf::Color colorInctive = { 255, 255, 255 };
+    std::vector<Entity> entities = generateEntities(
+        screenWidth, screenHeight, particles, entityRadius, maxSpeed, 
+        { 255, 0, 0 }, { 255, 255, 255 }, border);
 
-    std::unique_ptr<sf::RenderWindow> window = generateWindow(screenWidth, screenHeight, "Spatial Hash Grid");
-
-    std::vector<Entity> entities = generateEntities(screenWidth, screenHeight, particles, radius, maxSpeed, colorActive, colorInctive, border);
-
+    // variables
     bool paused = false;
     bool draw_grid = false;
+    bool mousePressed = false;
+    unsigned long long frameCount = 0;
+
+    sf::Vector2f mousePosition = getMousePositionFloat(*window);
 
     // Zooming
-    constexpr float zoomStrength = 0.25f;
     ZoomableVertexArray zoomedCircles(&circles.m_circleArray, zoomStrength, screenWidth, screenHeight);
     ZoomableVertexArray zoomedGrid(&grid.m_renderGrid, zoomStrength, screenWidth, screenHeight);
 
@@ -212,6 +155,27 @@ int main()
                 zoomedCircles.updateMousePosition(mousePos, event.mouseWheelScroll.delta);
                 zoomedGrid.updateMousePosition(mousePos, event.mouseWheelScroll.delta);
             }
+
+            else if (event.type == sf::Event::MouseButtonPressed)
+            {
+                mousePressed = true;
+            }
+
+            else if (event.type == sf::Event::MouseButtonReleased)
+            {
+                mousePressed = false;
+            }
+        }
+
+        if (mousePressed)
+        {
+            sf::Vector2f newPosition = getMousePositionFloat(*window);
+            sf::Vector2f deltaPosition = newPosition - mousePosition;
+
+            zoomedCircles.translate(deltaPosition);
+            zoomedGrid.translate(deltaPosition);
+
+            mousePosition = newPosition;
         }
 
         window->clear();
@@ -222,7 +186,7 @@ int main()
         {
 	        for (Entity& entity : entities)
 	        {
-	        	entity.update(circles, grid.findNear(entity));
+	        	entity.update(circles, grid.findNear(entity, entityRadius));
 	        }
         }
 
@@ -232,5 +196,7 @@ int main()
         if (draw_grid)
 			zoomedGrid.drawVertexArray(*window, grid.m_renderGrid);
         window->display();
+
+        frameCount++;
     }
 }

@@ -136,6 +136,8 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\External\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <Optimization>Full</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -155,6 +157,8 @@
     <ClInclude Include="src\entity.hpp" />
     <ClInclude Include="src\SpatialHashGrid\spatialHashGrid.h" />
     <ClInclude Include="src\SpatialHashGrid\utilities.h" />
+    <ClInclude Include="src\utilities\generalFunctions.hpp" />
+    <ClInclude Include="src\utilities\zoomableVertexArray.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="openal32.dll" />
