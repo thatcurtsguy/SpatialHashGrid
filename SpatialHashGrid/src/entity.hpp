@@ -54,33 +54,19 @@ private:
 	{
 		const float buffer = m_radius;
 
-		if (p_position.x < m_border.left + buffer || p_position.x > m_border.left + m_border.width - buffer)
-		{
+		const bool x_out_of_bounds = p_position.x < m_border.left + buffer || p_position.x > m_border.left + m_border.width - buffer;
+		const bool y_out_of_bounds = p_position.y < m_border.top + buffer || p_position.y > m_border.top + m_border.height - buffer;
+
+		if (x_out_of_bounds) {
 			m_velocity.x *= -1;
 		}
 
-		if (p_position.y < m_border.top + buffer || p_position.y > m_border.top + m_border.height - buffer)
-		{
+		if (y_out_of_bounds) {
 			m_velocity.y *= -1;
 		}
 
-		if (p_position.x < m_border.left + buffer) 
-		{
-			p_position.x = m_border.left + buffer;
-		}
-		else if (p_position.x > m_border.left + m_border.width - buffer) 
-		{
-			p_position.x = m_border.left + m_border.width - buffer;
-		}
-
-		if (p_position.y < m_border.top + buffer) 
-		{
-			p_position.y = m_border.top + buffer;
-		}
-		else if (p_position.y > m_border.top + m_border.height - buffer) 
-		{
-			p_position.y = m_border.top + m_border.height - buffer;
-		}
+		p_position.x = std::max(m_border.left + buffer, std::min(p_position.x, m_border.left + m_border.width - buffer));
+		p_position.y = std::max(m_border.top + buffer, std::min(p_position.y, m_border.top + m_border.height - buffer));
 	}
 
 
@@ -118,10 +104,9 @@ private:
 
 	void interactWithNearby(const Circle& renderCircle, ArrayOfCircles& allCircles, const std::vector<Entity*>& nearbyEntities) const
 	{
-		const bool collision = checkNearbyCollision(nearbyEntities);
 		const sf::Color currentColor = renderCircle.getColor(allCircles.m_circleArray);
 
-		if (collision == true)
+		if (checkNearbyCollision(nearbyEntities) == true)
 		{
 			if (currentColor != m_colorActive)
 			{

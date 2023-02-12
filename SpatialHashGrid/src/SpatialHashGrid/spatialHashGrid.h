@@ -2,7 +2,6 @@
 
 #include <SFML/Graphics.hpp>
 #include <vector>
-#include <algorithm>
 
 #include "utilities.h"
 
@@ -45,36 +44,29 @@ class SpatialHashGrid
 
 	const unsigned int m_vertexReserve{};
 
-	unsigned int m_totalCells{};
-	unsigned int m_gridsX{};
-	unsigned int m_gridsY{};
+	unsigned int m_cellsX{};
+	unsigned int m_cellsY{};
 
 	sf::Rect<float> m_border{};
 	std::vector<std::vector<Cell<T>>> m_cellsArray{};
-	std::vector<T> m_points{};
 
-
-public:
 	sf::VertexArray m_renderGrid{};
 
 
 private:
-
-	void initGrid()
+	void initGridCells()
 	{
 		/* this function initilises the grid cells in a 2d Array for the rows and columns
 			it is a 2d array so we can optimise searches by fitering through the X and then Y coordinate
 			rather than searching through every gridcell
 		*/
 
-		m_cellsArray.reserve(m_gridsX);
+		m_cellsArray.reserve(m_cellsX);
+		std::vector<Cell<T>> cellsRow(m_cellsY);
 
-		for (size_t i = 0; i < m_gridsX; i++)
+		for (size_t i = 0; i < m_cellsX; i++)
 		{
-			std::vector<Cell<T>> cellsRow;
-			cellsRow.reserve(m_gridsY);
-
-			for (size_t j = 0; j < m_gridsY; j++)
+			for (size_t j = 0; j < m_cellsY; j++)
 			{
 				const sf::Rect rect( i * m_cellWidth, j * m_cellHeight, m_cellWidth, m_cellHeight );
 				Cell<T> cell(rect, m_vertexReserve);
@@ -82,38 +74,38 @@ private:
 				cellsRow.emplace_back(cell);
 			}
 			m_cellsArray.emplace_back(cellsRow);
+			cellsRow.clear();
 		}
 	}
 
 
-	void init()
+	void initSpatialHashGrid()
 	{
 		// calculating the cell dimensions
-		m_cellWidth = (m_border.left + m_border.width) / static_cast<float>(m_gridsX);
-		m_cellHeight = (m_border.top + m_border.height) / static_cast<float>(m_gridsY);
-		m_totalCells = m_gridsX * m_gridsY;
+		m_cellWidth = (m_border.left + m_border.width) / static_cast<float>(m_cellsX);
+		m_cellHeight = (m_border.top + m_border.height) / static_cast<float>(m_cellsY);
 
 		// initilising the grid
-		initGrid();
-		initDrawGrid();
+		initGridCells();
+		initVertexArray();
 	}
 
 
-	void initDrawGrid()
+	void initVertexArray()
 	{
-		sf::VertexArray grid(sf::Lines, m_gridsX * m_gridsY);
+		sf::VertexArray grid(sf::Lines, (m_cellsX + m_cellsY) * 2);
 
 		size_t counter = 0;
-		for (size_t i = 0; i < m_gridsX; i++)
+		for (size_t i = 0; i < m_cellsX; i++)
 		{
-			grid[counter+0].position = { i * m_cellWidth, 0 };
-			grid[counter+1].position = { i * m_cellWidth, m_border.top + m_border.height };
+			grid[counter].position = { i * m_cellWidth, 0 };
+			grid[counter + 1].position = { i * m_cellWidth, m_border.top + m_border.height };
 			counter += 2;
 		}
 
-		for (size_t i = 0; i < m_gridsY; i++)
+		for (size_t i = 0; i < m_cellsY; i++)
 		{
-			grid[counter + 0].position = { 0, i * m_cellHeight };
+			grid[counter].position = { 0, i * m_cellHeight };
 			grid[counter + 1].position = { m_border.left + m_border.width, i * m_cellHeight };
 			counter += 2;
 		}
@@ -122,9 +114,10 @@ private:
 	}
 
 
+
 	bool checkValidIndex(const sf::Vector2i index) const
 	{
-		if (index.x < 0 || index.y < 0 || index.x >= m_gridsX || index.y >= m_gridsY)
+		if (index.x < 0 || index.y < 0 || index.x >= m_cellsX || index.y >= m_cellsY)
 			return false;
 		return true;
 	}
@@ -136,7 +129,7 @@ private:
 	}
 
 
-	Cell<T>& cellAtIndex(sf::Vector2i index)
+	Cell<T>& get(sf::Vector2i index)
 	{
 		return m_cellsArray.at(index.x).at(index.y);
 	}
@@ -151,45 +144,18 @@ private:
 		}
 	}
 
-	sf::Vector2i positionToIndex(const sf::Vector2f position, const bool preventOutOfRange = false, const bool wrap = true) const
+	sf::Vector2i positionToIndex(const sf::Vector2f position) const
 	{
-		/* findCell function finds the cell which contains the position parameter, it iterates through
-		   cellsArray which is a 2D std::vector. once found it returns a std::tuple for the indexes to find said cell
-		   if no cell was found it returns -1, -1 for both indexes
-		*/
-		sf::Vector2i index(position.x / m_cellWidth, position.y / m_cellHeight);
-
-		// validation
-		if (checkValidIndex(index))
-		{
-			return index;
-		}
-
-		if (preventOutOfRange)
-		{
-			index.x = (index.x < 0) ? 0 : (index.x >= m_gridsX) ? m_gridsX - 1 : index.x;
-			index.y = (index.y < 0) ? 0 : (index.y >= m_gridsY) ? m_gridsY - 1 : index.y;
-			return index;
-
-		}
-
-		if (wrap)
-		{
-
-		}
-
-		const std::string result = concatenate("position: { ", position.x, " , ", position.y, " } ", " index: { ", index.x, ",", index.y, " }");
-		RaiseOutOfBoundsError(result);
-		return { -1, -1 };
+		return sf::Vector2i(std::floor(position.x / m_cellWidth), std::floor(position.y / m_cellHeight));
 	}
 
 
 public:
 	// constructor
 	SpatialHashGrid(const sf::Rect<float> border, const unsigned int gridsX, const unsigned int gridsY, const unsigned int vertexReserve = 8)
-		: m_vertexReserve(vertexReserve), m_gridsX(gridsX), m_gridsY(gridsY), m_border(border)
+		: m_vertexReserve(vertexReserve), m_cellsX(gridsX), m_cellsY(gridsY), m_border(border)
 	{
-		init();
+		initSpatialHashGrid();
 	}
 	~SpatialHashGrid() = default;
 
@@ -199,21 +165,30 @@ public:
 		window.draw(m_renderGrid);
 	}
 
+	sf::VertexArray* getRenderGrid()
+	{
+		return &m_renderGrid;
+	}
 
 
-	std::vector<T*>& findNear(T& point, const float visualRange)
+	std::vector<T*>& findNear(const sf::Vector2f position, const float visualRange, const unsigned int unique_id)
 	{
 		// now we need to find which cell contains the point
-		//return getCellsAroundRange(point.getPosition(), visualRange);
-		const sf::Vector2i cell = positionToIndex(point.getPosition());
-		return cellAtIndex(cell).container;
+		const sf::Vector2i index = positionToIndex(position);
+		std::vector<T*>& entities = get(index).container;
+
+		return entities;
+		//return apply_visual_range(entities, position, visualRange, unique_id);
 	}
 
 
 	void addPoint(T* point)
 	{
-		const sf::Vector2i index = positionToIndex(point->getPosition());
-		cellAtIndex(index).add(point);
+		if (const sf::Vector2i index = positionToIndex(point->getPosition()); checkValidIndex(index) == true)
+			get(index).add(point);
+
+		else
+			RaiseOutOfBoundsError("[RUNTIME ERROR]: object passed in is out of bounds, check boundary collision");
 	}
 
 
@@ -236,10 +211,10 @@ public:
 
 		m_cellsArray.clear();
 
-		m_gridsX = gridsX;
-		m_gridsY = gridsY;
+		m_cellsX = gridsX;
+		m_cellsY = gridsY;
 
-		init();
-		initDrawGrid();
+		initSpatialHashGrid();
+		initVertexArray();
 	}
 };

@@ -44,9 +44,9 @@ struct ZoomableVertexArray {
         update(mouseWheelScroll_delta, offset);
     }
 
-    void drawVertexArray(sf::RenderWindow& window, const sf::VertexArray& vArray) const
+    void drawVertexArray(sf::RenderWindow& window, const sf::VertexArray* vArray) const
     {
-        window.draw(vArray, m_transform);
+        window.draw(*vArray, m_transform);
     }
 
 };

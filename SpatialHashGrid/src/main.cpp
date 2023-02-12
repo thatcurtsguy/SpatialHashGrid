@@ -56,7 +56,7 @@ std::vector<Entity> generateEntities(const float screenWidth, const float screen
 	    const sf::Vector2f position = { randfloat(radius, screenWidth - radius), randfloat(radius, screenHeight - radius) };
 	    const sf::Vector2f velocity = { randfloat(-2.0f, 2.0f) , randfloat(-2.0f, 2.0f) };
 
-        Entity entity(position, velocity, colorActive, colorInctive, radius, static_cast<unsigned int>(i), maxSpeed, border);
+        Entity entity(position, velocity, colorActive, colorInctive, radius,i, maxSpeed, border);
         entities.emplace_back(entity);
     }
 
@@ -68,7 +68,7 @@ int main()
 {
     constexpr unsigned int particles = 50'000;
     constexpr unsigned int vertexReserve = 10;
-    constexpr unsigned int circleSides = 10;
+    constexpr unsigned int circleSides = 5;
     constexpr unsigned int deltaGridRate = 10;
 
     constexpr float maxSpeed     = 0.04f;
@@ -106,7 +106,7 @@ int main()
 
     // Zooming
     ZoomableVertexArray zoomedCircles(&circles.m_circleArray, zoomStrength, screenWidth, screenHeight);
-    ZoomableVertexArray zoomedGrid(&grid.m_renderGrid, zoomStrength, screenWidth, screenHeight);
+    ZoomableVertexArray zoomedGrid(grid.getRenderGrid(), zoomStrength, screenWidth, screenHeight);
 
 
     // main game loop
@@ -186,15 +186,15 @@ int main()
         {
 	        for (Entity& entity : entities)
 	        {
-	        	entity.update(circles, grid.findNear(entity, entityRadius));
+	        	entity.update(circles, grid.findNear(entity.p_position, entityRadius, entity.id));
 	        }
         }
 
 
         setCaption(*window, clock);
-        zoomedCircles.drawVertexArray(*window, circles.m_circleArray);
+        zoomedCircles.drawVertexArray(*window, &circles.m_circleArray);
         if (draw_grid)
-			zoomedGrid.drawVertexArray(*window, grid.m_renderGrid);
+			zoomedGrid.drawVertexArray(*window, grid.getRenderGrid());
         window->display();
 
         frameCount++;

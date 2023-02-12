@@ -4,7 +4,7 @@
 template <typename T>
 struct Cell
 {
-	explicit Cell(const sf::Rect<float>& Rect, const unsigned int vertexReserve) : rect(Rect)
+	explicit Cell(const sf::Rect<float>& Rect = {0, 0, 0, 0}, const unsigned int vertexReserve = 0) : rect(Rect)
 	{
 		reserve(vertexReserve);
 	}
