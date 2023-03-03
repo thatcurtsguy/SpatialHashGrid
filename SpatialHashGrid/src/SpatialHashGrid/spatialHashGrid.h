@@ -8,23 +8,10 @@
 /*
 	SpatialHashGrid
 
-	PLEASE NOTE:
-	> for any entity class you plan to add to this spatial hash grid, please add the following varaibles to it:
-	const unsigned int id{};
-
-	sf::Vector2f getPosition() const
-	{
-	    return m_position;
-	}
-
 	Improvements:
 	- make a check visual range function
-	- make a way to check nearby gridcells
 	- make a way to return the cells within visual range
-	- make the grid a 2d array so we can make more optimised searching by matching the x then y coord instead of checking through all
 	- automatic resolution resizer
-	- option for resolution resizer
-	- better cell finding alg
 
 	Notes:
 	FINAL GOAL: 50k particles at 144fps
@@ -36,7 +23,6 @@
 */
 
 
-template <typename T>
 class SpatialHashGrid
 {
 	float m_cellWidth{};
@@ -48,7 +34,7 @@ class SpatialHashGrid
 	unsigned int m_cellsY{};
 
 	sf::Rect<float> m_border{};
-	std::vector<std::vector<Cell<T>>> m_cellsArray{};
+	std::vector<std::vector<Cell>> m_cellsArray{};
 
 	sf::VertexArray m_renderGrid{};
 
@@ -61,20 +47,17 @@ private:
 			rather than searching through every gridcell
 		*/
 
-		m_cellsArray.reserve(m_cellsX);
-		std::vector<Cell<T>> cellsRow(m_cellsY);
-
-		for (size_t i = 0; i < m_cellsX; i++)
+		m_cellsArray.resize(m_cellsX, std::vector<Cell>(m_cellsY));
+		sf::Rect<float> rect(0, 0, m_cellWidth, m_cellHeight);
+		for (int i = 0; i < m_cellsX; i++) 
 		{
-			for (size_t j = 0; j < m_cellsY; j++)
+			rect.left = i * m_cellWidth;
+			for (int j = 0; j < m_cellsY; j++) 
 			{
-				const sf::Rect rect( i * m_cellWidth, j * m_cellHeight, m_cellWidth, m_cellHeight );
-				Cell<T> cell(rect, m_vertexReserve);
-
-				cellsRow.emplace_back(cell);
+				rect.top = j * m_cellHeight;
+				m_cellsArray[i][j].rect = rect;
+				m_cellsArray[i][j].m_vertexReserve = m_vertexReserve;
 			}
-			m_cellsArray.emplace_back(cellsRow);
-			cellsRow.clear();
 		}
 	}
 
@@ -96,14 +79,14 @@ private:
 		sf::VertexArray grid(sf::Lines, (m_cellsX + m_cellsY) * 2);
 
 		size_t counter = 0;
-		for (size_t i = 0; i < m_cellsX; i++)
+		for (float i = 0; i < static_cast<float>(m_cellsX); i++)
 		{
 			grid[counter].position = { i * m_cellWidth, 0 };
 			grid[counter + 1].position = { i * m_cellWidth, m_border.top + m_border.height };
 			counter += 2;
 		}
 
-		for (size_t i = 0; i < m_cellsY; i++)
+		for (float i = 0; i < static_cast<float>(m_cellsY); i++)
 		{
 			grid[counter].position = { 0, i * m_cellHeight };
 			grid[counter + 1].position = { m_border.left + m_border.width, i * m_cellHeight };
@@ -115,9 +98,9 @@ private:
 
 
 
-	bool checkValidIndex(const sf::Vector2i index) const
+	bool checkValidIndex(const sf::Vector2i cellIndex) const
 	{
-		if (index.x < 0 || index.y < 0 || index.x >= m_cellsX || index.y >= m_cellsY)
+		if (cellIndex.x < 0 || cellIndex.y < 0 || cellIndex.x >= m_cellsX || cellIndex.y >= m_cellsY)
 			return false;
 		return true;
 	}
@@ -129,24 +112,38 @@ private:
 	}
 
 
-	Cell<T>& get(sf::Vector2i index)
+	Cell& get(const sf::Vector2i cellIndex)
 	{
-		return m_cellsArray.at(index.x).at(index.y);
+		return m_cellsArray.at(cellIndex.x).at(cellIndex.y);
 	}
 
 
-	void resetGrid()
-	{
-		for (std::vector<Cell<T>>& column : m_cellsArray)
-		{
-			for (Cell<T>& cell : column)
-				cell.clear();
-		}
-	}
-
-	sf::Vector2i positionToIndex(const sf::Vector2f position) const
+	sf::Vector2i positionToCellIndex(const sf::Vector2f position) const
 	{
 		return sf::Vector2i(std::floor(position.x / m_cellWidth), std::floor(position.y / m_cellHeight));
+	}
+
+
+	std::vector<unsigned int> getLocalObjectIndexes(const sf::Vector2i cellIndex)
+	{
+		std::vector<unsigned int> selectedObjectIndexes;
+		selectedObjectIndexes.reserve(get({ 0, 0 }).m_vertexReserve * 9);
+
+		for (int x = cellIndex.x - 1; x <= cellIndex.x + 1; x++)
+		{
+			for (int y = cellIndex.y - 1; y <= cellIndex.y + 1; y++)
+			{
+				if (!checkValidIndex({ x, y }))
+					continue;
+
+				for (const unsigned int object : get({ x, y }).container)
+				{
+					selectedObjectIndexes.push_back(object);
+				}
+			}
+		}
+
+		return selectedObjectIndexes;
 	}
 
 
@@ -165,43 +162,41 @@ public:
 		window.draw(m_renderGrid);
 	}
 
+
+	void resetGrid()
+	{
+		for (std::vector<Cell>& column : m_cellsArray)
+		{
+			for (Cell& cell : column)
+				cell.clear();
+		}
+	}
+
+
 	sf::VertexArray* getRenderGrid()
 	{
 		return &m_renderGrid;
 	}
 
 
-	std::vector<T*>& findNear(const sf::Vector2f position, const float visualRange, const unsigned int unique_id)
+	std::vector<unsigned int> findNear(const sf::Vector2f position)
 	{
 		// now we need to find which cell contains the point
-		const sf::Vector2i index = positionToIndex(position);
-		std::vector<T*>& entities = get(index).container;
+		const sf::Vector2i index = positionToCellIndex(position);
 
-		return entities;
-		//return apply_visual_range(entities, position, visualRange, unique_id);
+		return getLocalObjectIndexes(index);
 	}
 
 
-	void addPoint(T* point)
+	void addPoint(const unsigned int pointIndex, const sf::Vector2f position)
 	{
-		if (const sf::Vector2i index = positionToIndex(point->getPosition()); checkValidIndex(index) == true)
-			get(index).add(point);
+		if (const sf::Vector2i cellIndex = positionToCellIndex(position); checkValidIndex(cellIndex) == true)
+			get(cellIndex).add(pointIndex);
 
 		else
 			RaiseOutOfBoundsError("[RUNTIME ERROR]: object passed in is out of bounds, check boundary collision");
 	}
 
-
-	void addPoints(std::vector<T>& points)
-	{
-		resetGrid();
-
-		// we then can add all the Particles one by one
-		for (T& point : points)
-		{
-			addPoint(&point);
-		}
-	}
 
 
 	void reSize(const unsigned int gridsX, const unsigned int gridsY)

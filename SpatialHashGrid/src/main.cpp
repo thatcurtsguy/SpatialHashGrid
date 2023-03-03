@@ -64,139 +64,215 @@ std::vector<Entity> generateEntities(const float screenWidth, const float screen
 }
 
 
+struct Settings
+{
+	const unsigned int particles;
+    const unsigned int vertexReserve;
+    const unsigned int circleSides;
+    const unsigned int deltaGridRate;
+
+    const float maxSpeed;
+    const float entityRadius;
+    const float zoomStrength;
+
+    const float screenWidth;
+    const float screenHeight;
+
+    unsigned int CellsX;
+    unsigned int CellsY;
+};
+
+
+struct RunTimeVariables
+{
+    bool paused;
+    bool draw_grid;
+    bool mousePressed;
+    unsigned long long frameCount;
+    sf::Vector2f mousePosition;
+};
+
+
+void pollEvents(sf::RenderWindow& window, RunTimeVariables& runVars, Settings& settings, 
+    ZoomableVertexArray& zoomedCircles, ZoomableVertexArray& zoomedGrid, SpatialHashGrid& grid)
+{
+    // event handeler
+    sf::Event event{};
+
+    while (window.pollEvent(event))
+    {
+        if (event.type == sf::Event::Closed)
+            window.close();
+
+        else if (event.type == sf::Event::KeyPressed)
+        {
+            switch (event.key.code) {
+            case sf::Keyboard::Escape:
+                window.close();
+                break;
+
+            case sf::Keyboard::Space:
+                runVars.paused = not runVars.paused;
+                break;
+
+            case sf::Keyboard::G:
+                runVars.draw_grid = not runVars.draw_grid;
+                break;
+
+            case sf::Keyboard::Num1:
+                settings.CellsX += settings.deltaGridRate;
+                settings.CellsY += settings.deltaGridRate;
+                grid.reSize(settings.CellsX, settings.CellsY);
+                break;
+
+            case sf::Keyboard::Num2:
+                settings.CellsX -= settings.deltaGridRate;
+                settings.CellsY -= settings.deltaGridRate;
+                grid.reSize(settings.CellsX, settings.CellsY);
+                break;
+            }
+        }
+
+        else if (event.type == sf::Event::MouseWheelScrolled)
+        {
+            auto mousePos = sf::Vector2f(sf::Mouse::getPosition(window));
+            zoomedCircles.updateMousePosition(mousePos, event.mouseWheelScroll.delta);
+            zoomedGrid.updateMousePosition(mousePos, event.mouseWheelScroll.delta);
+        }
+
+        else if (event.type == sf::Event::MouseButtonPressed)
+        {
+            runVars.mousePressed = true;
+        }
+
+        else if (event.type == sf::Event::MouseButtonReleased)
+        {
+            runVars.mousePressed = false;
+        }
+    }
+}
+
+
 int main()
 {
-    constexpr unsigned int particles = 50'000;
-    constexpr unsigned int vertexReserve = 10;
-    constexpr unsigned int circleSides = 5;
-    constexpr unsigned int deltaGridRate = 10;
+    Settings settings(
+        10'000,
+        5,
+        13,
+        10,
+        0.04f,
+        3.5f,
+        0.25f,
+        1920.0f,
+        1080.0f
+    );
+    settings.CellsX = calcCellsXY(settings.vertexReserve, settings.particles);
+    settings.CellsY = settings.CellsX;
 
-    constexpr float maxSpeed     = 0.04f;
-    constexpr float entityRadius = 1.7f;
-    constexpr float zoomStrength = 0.25f;
 
-    constexpr float screenWidth  = 1920.0f;
-    constexpr float screenHeight = 1080.0f;
-
-    unsigned int CellsX = calcCellsXY(vertexReserve, particles);
-    unsigned int CellsY = calcCellsXY(vertexReserve, particles);
 
     // initilising random
     std::srand(static_cast<unsigned>(time(nullptr)));
 
     // setting up the screen
-    std::unique_ptr<sf::RenderWindow> window = generateWindow(screenWidth, screenHeight, "Spatial Hash Grid");
+    std::unique_ptr<sf::RenderWindow> window = generateWindow(settings.screenWidth, settings.screenHeight, "Spatial Hash Grid");
     auto clock = sf::Clock::Clock();
 
-    ArrayOfCircles circles(particles, entityRadius, circleSides);
-    sf::Rect border{ 0.0f, 0.0f, screenWidth, screenHeight };
-    SpatialHashGrid<Entity> grid(border, CellsX, CellsY, vertexReserve);
+    ArrayOfCircles circles(settings.particles, settings.entityRadius, settings.circleSides);
+    sf::Rect border{ 0.0f, 0.0f, settings.screenWidth, settings.screenHeight };
+    SpatialHashGrid grid(border, settings.CellsX, settings.CellsY, settings.vertexReserve);
 
     std::vector<Entity> entities = generateEntities(
-        screenWidth, screenHeight, particles, entityRadius, maxSpeed, 
+        settings.screenWidth, settings.screenHeight, settings.particles, settings.entityRadius, settings.maxSpeed, 
         { 255, 0, 0 }, { 255, 255, 255 }, border);
 
-    // variables
-    bool paused = false;
-    bool draw_grid = false;
-    bool mousePressed = false;
-    unsigned long long frameCount = 0;
 
-    sf::Vector2f mousePosition = getMousePositionFloat(*window);
+    RunTimeVariables runVars(
+        false,
+        false,
+        false,
+        0,
+        getMousePositionFloat(*window)
+    );
 
     // Zooming
-    ZoomableVertexArray zoomedCircles(&circles.m_circleArray, zoomStrength, screenWidth, screenHeight);
-    ZoomableVertexArray zoomedGrid(grid.getRenderGrid(), zoomStrength, screenWidth, screenHeight);
+    ZoomableVertexArray zoomedCircles(&circles.m_circleArray, settings.zoomStrength, settings.screenWidth, settings.screenHeight);
+    ZoomableVertexArray zoomedGrid(grid.getRenderGrid(), settings.zoomStrength, settings.screenWidth, settings.screenHeight);
 
 
     // main game loop
     while (window->isOpen()) 
     {
-        // event handeler
-        sf::Event event{};
+        pollEvents(*window, runVars, settings, zoomedCircles, zoomedGrid, grid);
 
-    	while (window->pollEvent(event)) 
-        {
-            if (event.type == sf::Event::Closed)
-                window->close();
-
-            else if (event.type == sf::Event::KeyPressed) 
-            {
-                switch (event.key.code) {
-                    case sf::Keyboard::Escape:
-                        window->close();
-                        break;
-
-                    case sf::Keyboard::Space:
-                        paused = not paused;
-                        break;
-
-                    case sf::Keyboard::G:
-                        draw_grid = not draw_grid;
-                        break;
-
-                    case sf::Keyboard::Num1:
-                        CellsX+= deltaGridRate;
-                        CellsY+= deltaGridRate;
-                        grid.reSize(CellsX, CellsY);
-                        break;
-
-                    case sf::Keyboard::Num2:
-                        CellsX-= deltaGridRate;
-                        CellsY-= deltaGridRate;
-                        grid.reSize(CellsX, CellsY);
-                        break;
-                }
-            }
-
-            else if (event.type == sf::Event::MouseWheelScrolled)
-            {
-                auto mousePos = sf::Vector2f(sf::Mouse::getPosition(*window));
-                zoomedCircles.updateMousePosition(mousePos, event.mouseWheelScroll.delta);
-                zoomedGrid.updateMousePosition(mousePos, event.mouseWheelScroll.delta);
-            }
-
-            else if (event.type == sf::Event::MouseButtonPressed)
-            {
-                mousePressed = true;
-            }
-
-            else if (event.type == sf::Event::MouseButtonReleased)
-            {
-                mousePressed = false;
-            }
-        }
-
-        if (mousePressed)
+        if (runVars.mousePressed)
         {
             sf::Vector2f newPosition = getMousePositionFloat(*window);
-            sf::Vector2f deltaPosition = newPosition - mousePosition;
+            sf::Vector2f deltaPosition = newPosition - runVars.mousePosition;
 
             zoomedCircles.translate(deltaPosition);
             zoomedGrid.translate(deltaPosition);
 
-            mousePosition = newPosition;
+            runVars.mousePosition = newPosition;
         }
 
         window->clear();
 
-        grid.addPoints(entities);
-
-        if (!paused)
+        if (!runVars.paused)
         {
+	        grid.resetGrid();
+
+	        // first loop is for adding the points
+	        for (int i{0}; i < entities.size(); i++)
+	        {
+	            grid.addPoint(i, entities[i].getPosition());
+	        }
+
+
+	        // second loop is for querying the nearby
 	        for (Entity& entity : entities)
 	        {
-	        	entity.update(circles, grid.findNear(entity.p_position, entityRadius, entity.id));
+                std::vector<unsigned int> nearbyIndexes = grid.findNear(entity.p_position);
+
+                entity.p_nearby.clear();
+	        	entity.p_nearby.reserve(nearbyIndexes.size());
+
+                for (const unsigned int index : nearbyIndexes)
+                {
+                    entity.p_nearby.emplace_back(&entities[index]);
+                }
 	        }
+
+            // third loop is for updating the entities with their nearby entities
+            for (Entity& entity : entities)
+            {
+                entity.update(circles);
+            }
         }
 
 
         setCaption(*window, clock);
         zoomedCircles.drawVertexArray(*window, &circles.m_circleArray);
-        if (draw_grid)
+        if (runVars.draw_grid)
 			zoomedGrid.drawVertexArray(*window, grid.getRenderGrid());
         window->display();
 
-        frameCount++;
+        runVars.frameCount++;
     }
 }
+
+/*
+LOOP ALL:
+vector = [i0, i1, i2, i3]
+
+input_to_grid(vector)
+
+for entity in vector:
+    item.nearby = find_nearby(entity)
+
+for entity in vector:
+    entity.update()
+
+for entity in vector:
+    entity.death_check() // remove from vector check
+ */

@@ -1,54 +1,38 @@
 #pragma once
 
 
-template <typename T>
 struct Cell
 {
-	explicit Cell(const sf::Rect<float>& Rect = {0, 0, 0, 0}, const unsigned int vertexReserve = 0) : rect(Rect)
-	{
-		reserve(vertexReserve);
-	}
-	~Cell() = default;
+	unsigned int m_vertexReserve;
+	sf::Rect<float> rect;
+    std::vector<unsigned int> container;
 
-	sf::Rect<float> rect{}; 
-	std::vector<T*> container{};
+    explicit Cell(const sf::Rect<float>& rect = { 0, 0, 0, 0 }, const unsigned int vertexReserve = 0)
+        : m_vertexReserve(vertexReserve), rect(rect)
+    {
+        reserve(vertexReserve);
+    }
 
-	void clear()
-	{
-		container.clear();
-	}
+    void clear()
+    {
+        container.clear();
+    }
 
-	void reserve(const unsigned int amount)
-	{
-		container.reserve(amount);
-	}
+    void reserve(const std::size_t amount)
+    {
+        container.reserve(amount);
+    }
 
-	void add(T* point)
-	{
-		container.emplace_back(point);
-	}
+    void add(const unsigned int pointIndex)
+    {
+        container.emplace_back(pointIndex);
+    }
 
-	T* get(const unsigned int index)
-	{
-		return container.at(index);
-	}
+    unsigned int get(const std::size_t vectorIndex) const
+    {
+        return container[vectorIndex];
+    }
 };
-
-template <typename T2>
-static std::string concatenate(const T2& t)
-{
-	std::stringstream ss;
-	ss << t;
-	return ss.str();
-}
-
-template <typename T2, typename... Args>
-static std::string concatenate(const T2& t, const Args&... args)
-{
-	std::stringstream ss;
-	ss << t << concatenate(args...);
-	return ss.str();
-}
 
 
 inline unsigned int calcCellsXY(const unsigned int pointsPerCell, const unsigned int points)
