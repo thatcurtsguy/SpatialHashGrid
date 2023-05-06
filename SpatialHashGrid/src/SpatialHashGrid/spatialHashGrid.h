@@ -3,8 +3,8 @@
 #include <SFML/Graphics.hpp>
 #include <vector>
 
-#include "utilities.h"
-
+#include <cstdint>
+#include <iostream>
 /*
 	SpatialHashGrid
 
@@ -15,201 +15,192 @@
 
 	Notes:
 	FINAL GOAL: 50k particles at 144fps
-	03/10/2022 - 20k at 22fps
-	26/10/2022 - 40k at 32fps
+	03/10/2022 - 20k  at 22fps
+	26/10/2022 - 40k  at 32fps
+	03/03/2023 - 50k  at 25fps
+	16/03/2023 - 50k  at 12fps
+	25/03/2023 - 100k at 10fps
 
 	REMEMBER:
 	changing colors of the rects takes up about 20,000 microseconds
+	the reason why cells might not collide instantly might be due to using floats instead of doubles
 */
 
 
-class SpatialHashGrid
+// https://github.com/johnBuffer/VerletSFML-Multithread/blob/main/src/physics/collision_grid.hpp
+struct CollisionCell
 {
-	float m_cellWidth{};
-	float m_cellHeight{};
+	// cell_capacity is the absolute MAXIMUM amount of objects that will be in this cell
+	static constexpr uint8_t cell_capacity = 20;
+	static constexpr uint8_t max_cell_idx = cell_capacity - 1;
 
-	const unsigned int m_vertexReserve{};
+	uint8_t objects_count = 0;
+	int32_t objects[cell_capacity] = {};
 
-	unsigned int m_cellsX{};
-	unsigned int m_cellsY{};
+	CollisionCell() = default;
 
-	sf::Rect<float> m_border{};
-	std::vector<std::vector<Cell>> m_cellsArray{};
-
-	sf::VertexArray m_renderGrid{};
-
-
-private:
-	void initGridCells()
+	void addAtom(const int32_t id)
 	{
-		/* this function initilises the grid cells in a 2d Array for the rows and columns
-			it is a 2d array so we can optimise searches by fitering through the X and then Y coordinate
-			rather than searching through every gridcell
-		*/
-
-		m_cellsArray.resize(m_cellsX, std::vector<Cell>(m_cellsY));
-		sf::Rect<float> rect(0, 0, m_cellWidth, m_cellHeight);
-		for (int i = 0; i < m_cellsX; i++) 
-		{
-			rect.left = i * m_cellWidth;
-			for (int j = 0; j < m_cellsY; j++) 
-			{
-				rect.top = j * m_cellHeight;
-				m_cellsArray[i][j].rect = rect;
-				m_cellsArray[i][j].m_vertexReserve = m_vertexReserve;
-			}
-		}
+		objects[objects_count] = id;
+		objects_count += objects_count < max_cell_idx;
 	}
 
-
-	void initSpatialHashGrid()
+	void clear()
 	{
-		// calculating the cell dimensions
-		m_cellWidth = (m_border.left + m_border.width) / static_cast<float>(m_cellsX);
-		m_cellHeight = (m_border.top + m_border.height) / static_cast<float>(m_cellsY);
+		objects_count = 0;
+	}
+};
 
-		// initilising the grid
-		initGridCells();
-		initVertexArray();
+
+struct c_Vec
+{
+	static constexpr uint8_t max = CollisionCell::cell_capacity * 9;
+	int32_t array[max] = {};
+	uint8_t size = 0;
+
+	void add(const int32_t value)
+	{
+		if (size >= max)
+			return;
+
+		array[size] = value;
+		size++;
 	}
 
-
-	void initVertexArray()
+	[[nodiscard]] int32_t at(const unsigned index) const
 	{
-		sf::VertexArray grid(sf::Lines, (m_cellsX + m_cellsY) * 2);
-
-		size_t counter = 0;
-		for (float i = 0; i < static_cast<float>(m_cellsX); i++)
-		{
-			grid[counter].position = { i * m_cellWidth, 0 };
-			grid[counter + 1].position = { i * m_cellWidth, m_border.top + m_border.height };
-			counter += 2;
-		}
-
-		for (float i = 0; i < static_cast<float>(m_cellsY); i++)
-		{
-			grid[counter].position = { 0, i * m_cellHeight };
-			grid[counter + 1].position = { m_border.left + m_border.width, i * m_cellHeight };
-			counter += 2;
-		}
-
-		m_renderGrid = grid;
+		return array[index];
 	}
+};
 
 
+struct SpatialHashGrid
+{
+	std::vector<CollisionCell> m_cells{};
+	sf::Vector2u m_cellsXY{};
 
-	bool checkValidIndex(const sf::Vector2i cellIndex) const
+	sf::Vector2f conversionFactor{};
+	c_Vec found{};
+
+	// graphics
+	sf::Vector2f m_cellDimensions{};
+	sf::Rect<float> m_screenSize{};
+	sf::VertexBuffer m_renderGrid{};
+
+	// constructor and destructor
+	explicit SpatialHashGrid(const sf::Rect<float> screenSize = {}, const sf::Vector2u cellsXY = {})
 	{
-		if (cellIndex.x < 0 || cellIndex.y < 0 || cellIndex.x >= m_cellsX || cellIndex.y >= m_cellsY)
-			return false;
-		return true;
-	}
-
-
-	static void RaiseOutOfBoundsError(const std::string& message)
-	{
-		throw std::out_of_range(message);
-	}
-
-
-	Cell& get(const sf::Vector2i cellIndex)
-	{
-		return m_cellsArray.at(cellIndex.x).at(cellIndex.y);
-	}
-
-
-	sf::Vector2i positionToCellIndex(const sf::Vector2f position) const
-	{
-		return sf::Vector2i(std::floor(position.x / m_cellWidth), std::floor(position.y / m_cellHeight));
-	}
-
-
-	std::vector<unsigned int> getLocalObjectIndexes(const sf::Vector2i cellIndex)
-	{
-		std::vector<unsigned int> selectedObjectIndexes;
-		selectedObjectIndexes.reserve(get({ 0, 0 }).m_vertexReserve * 9);
-
-		for (int x = cellIndex.x - 1; x <= cellIndex.x + 1; x++)
-		{
-			for (int y = cellIndex.y - 1; y <= cellIndex.y + 1; y++)
-			{
-				if (!checkValidIndex({ x, y }))
-					continue;
-
-				for (const unsigned int object : get({ x, y }).container)
-				{
-					selectedObjectIndexes.push_back(object);
-				}
-			}
-		}
-
-		return selectedObjectIndexes;
-	}
-
-
-public:
-	// constructor
-	SpatialHashGrid(const sf::Rect<float> border, const unsigned int gridsX, const unsigned int gridsY, const unsigned int vertexReserve = 8)
-		: m_vertexReserve(vertexReserve), m_cellsX(gridsX), m_cellsY(gridsY), m_border(border)
-	{
-		initSpatialHashGrid();
+		init(screenSize, cellsXY);
 	}
 	~SpatialHashGrid() = default;
 
 
-	void drawGrid(sf::RenderWindow& window) const
+	void init(const sf::Rect<float> screenSize, const sf::Vector2u cellsXY)
 	{
-		window.draw(m_renderGrid);
+		m_cellsXY = cellsXY;
+		m_screenSize = screenSize;
+
+		m_cells.resize(m_cellsXY.x * m_cellsXY.y);
+
+		m_cellDimensions = { m_screenSize.width / static_cast<float>(m_cellsXY.x),
+							m_screenSize.height / static_cast<float>(m_cellsXY.y) };
+
+		conversionFactor = { 1.f / m_cellDimensions.x, 1.f / m_cellDimensions.y };
+
+		initVertexBuffer();
 	}
 
 
-	void resetGrid()
+	// other functions
+	void addAtom(const sf::Vector2f pos, const int32_t atom)
 	{
-		for (std::vector<Cell>& column : m_cellsArray)
-		{
-			for (Cell& cell : column)
-				cell.clear();
+		const sf::Vector2<uint32_t> cIdx = posTo2dIdx(pos);
+
+		if (!checkValidIndex(cIdx))
+			throw std::out_of_range("find() position argument out of range");
+
+		const uint32_t idx = idx2dTo1d(cIdx);
+		m_cells[idx].addAtom(atom);
+	}
+
+	void clear()
+	{
+		for (CollisionCell& cell : m_cells) {
+			cell.objects_count = 0;
 		}
 	}
 
-
-	sf::VertexArray* getRenderGrid()
+	c_Vec& find(const sf::Vector2f position)
 	{
-		return &m_renderGrid;
+		found.size = 0;
+
+		const sf::Vector2<uint32_t> cIdx = posTo2dIdx(position);
+		if (!checkValidIndex(cIdx))
+			throw std::out_of_range("find() position argument out of range");
+
+		// getting the indexes needed
+		for (unsigned x = cIdx.x - 1; x <= cIdx.x + 1; x++)
+		{
+			for (unsigned y = cIdx.y - 1; y <= cIdx.y + 1; y++)
+			{
+				const CollisionCell& cell = m_cells[idx2dTo1d({ x, y })];
+
+				for (unsigned i{0}; i < cell.objects_count; i++)
+					found.add(cell.objects[i]);
+			}
+		}
+
+		return found;
+	}
+
+	[[nodiscard]] uint32_t idx2dTo1d(const sf::Vector2<uint32_t> idx) const
+	{
+		return idx.x + idx.y * m_cellsXY.x;
+	}
+
+	[[nodiscard]] sf::Vector2<uint32_t> posTo2dIdx(const sf::Vector2f position) const
+	{
+		return {
+			static_cast<uint32_t>(position.x * conversionFactor.x),
+			static_cast<uint32_t>(position.y * conversionFactor.y)};
+	}
+
+	[[nodiscard]] bool checkValidIndex(const sf::Vector2u index) const
+	{
+		return !(index.x < 0 || index.y < 0 || index.x >= m_cellsXY.x || index.y >= m_cellsXY.y);
 	}
 
 
-	std::vector<unsigned int> findNear(const sf::Vector2f position)
+	void initVertexBuffer()
 	{
-		// now we need to find which cell contains the point
-		const sf::Vector2i index = positionToCellIndex(position);
+		std::vector<sf::Vertex> vertices(static_cast<std::vector<sf::Vertex>::size_type>((m_cellsXY.x + m_cellsXY.y) * 2));
 
-		return getLocalObjectIndexes(index);
+		m_renderGrid = sf::VertexBuffer(sf::Lines, sf::VertexBuffer::Static);
+		m_renderGrid.create(vertices.size());
+
+		size_t counter = 0;
+		for (unsigned i = 0; i < m_cellsXY.x; i++)
+		{
+			const float posX = static_cast<float>(i) * m_cellDimensions.x;
+			vertices[counter].position = { posX, 0 };
+			vertices[counter + 1].position = { m_screenSize.left + posX, m_screenSize.top + m_screenSize.height };
+			counter += 2;
+		}
+
+		for (unsigned i = 0; i < m_cellsXY.y; i++)
+		{
+			const float posY = static_cast<float>(i) * m_cellDimensions.y;
+			vertices[counter].position = { 0, posY };
+			vertices[counter + 1].position = { m_screenSize.left + m_screenSize.width, m_screenSize.top + posY };
+			counter += 2;
+		}
+
+		m_renderGrid.update(vertices.data(), vertices.size(), 0);
 	}
 
 
-	void addPoint(const unsigned int pointIndex, const sf::Vector2f position)
+	void reSize(const sf::Rect<float> screenSize)
 	{
-		if (const sf::Vector2i cellIndex = positionToCellIndex(position); checkValidIndex(cellIndex) == true)
-			get(cellIndex).add(pointIndex);
-
-		else
-			RaiseOutOfBoundsError("[RUNTIME ERROR]: object passed in is out of bounds, check boundary collision");
-	}
-
-
-
-	void reSize(const unsigned int gridsX, const unsigned int gridsY)
-	{
-		// we need to clear all the cells' points indexes
-		resetGrid();
-
-		m_cellsArray.clear();
-
-		m_cellsX = gridsX;
-		m_cellsY = gridsY;
-
-		initSpatialHashGrid();
-		initVertexArray();
+		init(screenSize, m_cellsXY);
 	}
 };
